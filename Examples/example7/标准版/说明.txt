@@ -1,0 +1,12 @@
+编译器：VSCode + PlatformIO(Arduino平台)
+单片机：ESP32-C3
+
+使用flash_download_tool把WEX-RobotDog.bin 固件烧录到ESP32-C3中，烧录地址从0开始。
+WEX-RobotDog 固件烧录后，设备的蓝牙名称会变为 WEX-RobotDog-****（后六位为芯片识别码）**，用于区分不同设备。
+通知特征值：0000FFE1-0000-1000-8000-00805F9B34FB
+写入特征值：0000FFE2-0000-1000-8000-00805F9B34FB
+
+
+可以访问本示例小程序，然后保存本示例小程序，就体验和修改小程序页面了。
+
+视频演示：https://www.bilibili.com/video/BV1CW5qzaEEB/?spm_id_from=333.1387.homepage.video_card.click&vd_source=092467d4573d952f721032ef4e80100f

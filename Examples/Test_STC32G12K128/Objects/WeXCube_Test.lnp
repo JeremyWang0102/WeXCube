@@ -1,0 +1,7 @@
+".\Objects\main.obj",
+".\Objects\wexcube.obj",
+".\Objects\wexcube_port.obj" 
+TO ".\Objects\WeXCube_Test" 
+PRINT(".\Listings\WeXCube_Test.map") CASE 
+CLASSES (EDATA (0x0-0xFFF), 
+HDATA (0x0-0xFFF)) 

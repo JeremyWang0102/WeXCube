@@ -1,0 +1,1142 @@
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE WEXCUBE
+OBJECT MODULE PLACED IN .\Objects\wexcube.obj
+COMPILER INVOKED BY: E:\Program Files\Keil_v5\C51\BIN\C51.EXE wexcube_sdk\wexcube.c LARGE OPTIMIZE(8,SPEED) BROWSE INCDI
+                    -R(.\User;.\wexcube_sdk) DEBUG OBJECTEXTEND PRINT(.\Listings\wexcube.lst) OBJECT(.\Objects\wexcube.obj)
+
+line level    source
+
+   1          /**
+   2           * @file wexcube.c
+   3           * @author JeremyWang (jeremywang0102@gmail.com / gin0101@126.com)
+   4           * @brief WeXCube 文件
+   5           * @version 2.0.0
+   6           * @date 2024-11-25
+   7           * 
+   8           * @copyright Copyright (c) 2024
+   9           * 
+  10           */
+  11          
+  12          #include "wexcube_config.h"
+  13          #include "wexcube_port.h"
+  14          #include "wexcube.h"
+  15          
+  16          #include <stdlib.h>
+  17          #include <string.h>
+  18          #include <stdio.h>
+  19          #include <float.h>
+  20          
+  21          #define WEXCUBE_VER     0x0200                          // WeXCube 版本号：2.0.0
+  22          
+  23          static wex_u8_t _wexRecCmdBuf[WEX_REC_BUF_SIZE] = {0};  // 接收缓冲区
+  24          static wex_u8_t _wexTrsCmdBuf[WEX_TRS_BUF_SIZE] = {0};  // 发送缓冲区
+  25          static wex_u8_t _wexRecItemBuf[40]  = {0};              // 接收子项缓冲区
+  26          static wex_u8_t _wexTrsItemBuf[40]  = {0};              // 发送子项缓冲区
+  27          static char _wexStrBuf[32]        = {0};                // 字符串缓冲区
+  28          
+  29          
+  30          typedef enum {                                          // 设备发送的指令类型
+  31              eWexDevCmd_None                     = 0x00,         // 无效指令
+  32              eWexDevCmd_ConnectAck               = 0x01,         // 确定连接
+  33              eWexDevCmd_Disconnect               = 0x02,         // 断开连接
+  34              eWexDevCmd_Handshake                = 0x03,         // 握手
+  35              eWexDevCmd_AskHandshake             = 0x04,         // 请求握手回复
+  36              eWexDevCmd_AskErr                   = 0x05,         // 请求错误码
+  37              eWexDevCmd_AskDate                  = 0x11,         // 请求日期
+  38              eWexDevCmd_AskTime                  = 0x12,         // 请求时间
+  39              eWexDevCmd_AskValue                 = 0x24,         // 请求控件值
+  40              eWexDevCmd_AskText                  = 0x25,         // 请求控件文本
+  41              eWexDevCmd_AskBackRGB               = 0x26,         // 请求控件背景 RGB 颜色
+  42              eWexDevCmd_AskTextRGB               = 0x27,         // 请求控件文本 RGB 颜色
+  43              eWexDevCmd_AskFontSize              = 0x28,         // 请求控件文本大小
+  44              eWexDevCmd_SetValue                 = 0x54,         // 设置控件值
+  45              eWexDevCmd_SetText                  = 0x55,         // 设置控件文本
+  46              eWexDevCmd_SetBackRGB               = 0x56,         // 设置控件背景 RGB 颜色
+  47              eWexDevCmd_SetTextRGB               = 0x57,         // 设置控件文本 RGB 颜色
+  48              eWexDevCmd_SetFontSize              = 0x58,         // 设置控件文本字体大小
+  49          } t_eWexDevCmdType;
+  50          
+  51          
+  52          typedef struct {
+  53              wex_u16_t   usHead;
+  54              wex_u16_t   usTail;
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 2   
+
+  55              wex_u8_t    *pucBuf;
+  56          } t_sWexBuf;
+  57          static t_sWexBuf _sWexRecBuf = {0, 0, _wexRecCmdBuf};
+  58          static t_sWexBuf _sWexTrsBuf = {0, 0, _wexTrsCmdBuf};
+  59          
+  60          
+  61          //#pragma pack(push, 1)
+  62          
+  63          typedef struct {
+  64              wex_u8_t    ucBegin;            // 起始标志
+  65              wex_u8_t    ucVer;              // 协议版本
+  66              wex_u8_t    ucLen;              // 指令长度
+  67              wex_u8_t    ucCmd;              // 指令类型
+  68              wex_u8_t    usEnd1;             // 结束标志
+  69                  wex_u8_t        usEnd2;             // 结束标志
+  70          } t_sWexCmdBasic;
+  71          
+  72          typedef struct {
+  73              wex_u8_t    ucBegin;            // 起始标志
+  74              wex_u8_t    ucVer;              // 协议版本
+  75              wex_u8_t    ucLen;              // 指令长度
+  76              wex_u8_t    ucCmd;              // 指令类型
+  77              wex_u8_t    ucCtrlId;           // 控件 ID
+  78              wex_u8_t    usEnd1;             // 结束标志
+  79                  wex_u8_t        usEnd2;             // 结束标志
+  80          } t_sWexCmdStruct1;
+  81          
+  82          typedef struct {
+  83              wex_u8_t    ucBegin;            // 起始标志
+  84              wex_u8_t    ucVer;              // 协议版本
+  85              wex_u8_t    ucLen;              // 指令长度
+  86              wex_u8_t    ucCmd;              // 指令类型
+  87              wex_u8_t    ucCtrlId;           // 控件 ID
+  88              wex_u8_t    ucValue;            // 控件值
+  89              wex_u8_t    usEnd1;             // 结束标志
+  90                  wex_u8_t        usEnd2;             // 结束标志
+  91          } t_sWexCmdStruct2;
+  92          
+  93          typedef struct {
+  94              wex_u8_t    ucBegin;            // 起始标志
+  95              wex_u8_t    ucVer;              // 协议版本
+  96              wex_u8_t    ucLen;              // 指令长度
+  97              wex_u8_t    ucCmd;              // 指令类型
+  98              wex_u8_t    ucCtrlId;           // 控件 ID
+  99              char        pcText[32];         // 控件文本
+ 100              wex_u8_t    usEnd1;             // 结束标志
+ 101                  wex_u8_t        usEnd2;             // 结束标志
+ 102          } t_sWexCmdStruct3;
+ 103          
+ 104          typedef struct {
+ 105              wex_u8_t    ucBegin;            // 起始标志
+ 106              wex_u8_t    ucVer;              // 协议版本
+ 107              wex_u8_t    ucLen;              // 指令长度
+ 108              wex_u8_t    ucCmd;              // 指令类型
+ 109              wex_u8_t    ucCtrlId;           // 控件 ID
+ 110              wex_u8_t    ucValue1;           // 控件值 1
+ 111              wex_u8_t    ucValue2;           // 控件值 2
+ 112              wex_u8_t    ucValue3;           // 控件值 3
+ 113              wex_u8_t    usEnd1;             // 结束标志
+ 114                  wex_u8_t        usEnd2;             // 结束标志
+ 115          } t_sWexCmdStruct4;
+ 116          
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 3   
+
+ 117          //#pragma pack(pop)
+ 118          
+ 119          
+ 120          static void _wex_pop(wex_u8_t *pucData, wex_u8_t ucLen, wex_u8_t ucFlag);
+ 121          static void _wex_connectAck(void);
+ 122          static void _wex_sendHandshake(void);
+ 123          static void _wex_sendBasic(t_eWexDevCmdType eCmdType, wex_u8_t ucFlag);
+ 124          
+ 125          #if defined(WEX_ASKVALUE) || defined(WEX_ASKTEXT) || defined(WEX_ASKBACKRGB) || defined(WEX_ASKTEXTRGB) ||
+             - defined(WEX_ASKFONTSIZE)
+              static void _wex_sendStruct1(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId);
+              #endif
+ 128          
+ 129          #if defined(WEX_SETVALUE) || defined(WEX_SETFONTSIZE)
+ 130          static void _wex_sendStruct2(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId, wex_u8_t ucValue);
+ 131          #endif
+ 132          
+ 133          #ifdef WEX_SETTEXT
+ 134          static void _wex_sendStruct3(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId, const char *pcText);
+ 135          #endif
+ 136          
+ 137          #if defined(WEX_SETBACKRGB) || defined(WEX_SETTEXTRGB) || defined(WEX_SETBACKCOLOR) || defined(WEX_SETTEXT
+             -COLOR)
+              static void _wex_sendStruct4(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId, wex_u8_t ucValue1, wex_u8_t ucV
+             -alue2, wex_u8_t ucValue3);
+              #endif
+ 140          
+ 141          
+ 142          // t_eWexColor 颜色编号对应的 RGB 值
+ 143          wex_u8_t code _pucWexColorRGB[][3] = {
+ 144              {0, 0, 0},          // 占位
+ 145              {0, 0, 0},          // 黑色
+ 146              {90, 90, 90},       // 灰色1
+ 147              {180, 180, 180},    // 灰色2
+ 148              {243, 243, 243},    // 灰色3
+ 149              {255, 255, 255},    // 白色
+ 150              {135, 206, 250},    // 天蓝色
+ 151              {255, 192, 203},    // 粉红色
+ 152              {255, 128, 0},      // 橙色
+ 153              {128, 128, 0},      // 橄榄色
+ 154              {0, 122, 255},      // 蓝色
+ 155              {255, 255, 0},      // 黄色
+ 156              {0, 128, 0},        // 绿色
+ 157              {255, 0, 255},      // 紫红色
+ 158              {255, 0, 0},        // 红色
+ 159              {128, 0, 128},      // 紫色
+ 160              {0, 255, 255},      // 青色
+ 161          };
+ 162          
+ 163          static t_sWexInfo _sWexInfo;        // WeXCube 信息
+ 164          static t_sWexCmd _wexRecCmd;        // 接收指令
+ 165          
+ 166          
+ 167          /**
+ 168           * @brief 初始化 WeXCube
+ 169           * 
+ 170           */
+ 171          void wex_init(void)
+ 172          {
+ 173   1          wex_port_init();
+ 174   1          wex_reset();
+ 175   1      
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 4   
+
+ 176   1          // WeXCube 信息初始化
+ 177   1          _sWexInfo.usWexVer      = WEXCUBE_VER;
+ 178   1          _sWexInfo.ucCmdVer      = WEX_CMD_VER;
+ 179   1          _sWexInfo.ucWexState    = 0;
+ 180   1          _sWexInfo.usRecBufSize  = WEX_REC_BUF_SIZE;
+ 181   1          _sWexInfo.usTrsBufSize  = WEX_TRS_BUF_SIZE;
+ 182   1          _sWexInfo.usTrsMaxOnce  = WEX_TRS_MAX_ONCE;
+ 183   1          _sWexInfo.ucDebugEnable = 0;
+ 184   1          _sWexInfo.ucConnectState= 0;
+ 185   1          _sWexInfo.ulTrsCmdCount = 0;
+ 186   1          _sWexInfo.ulRecCmdCount = 0;
+ 187   1      
+ 188   1          _wexRecItemBuf[0] = (wex_u8_t)WEX_CMD_BEGIN;
+ 189   1          _wexRecItemBuf[1] = (wex_u8_t)WEX_CMD_VER;
+ 190   1          _wexTrsItemBuf[0] = (wex_u8_t)WEX_CMD_BEGIN;
+ 191   1          _wexTrsItemBuf[1] = (wex_u8_t)WEX_CMD_VER;
+ 192   1      }
+ 193          
+ 194          
+ 195          /**
+ 196           * @brief 重置 WeXCube
+ 197           * 
+ 198           */
+ 199          void wex_reset(void)
+ 200          {
+ 201   1          // 清空接收缓冲区
+ 202   1          _sWexRecBuf.usHead  = 0;
+ 203   1          _sWexRecBuf.usTail  = 0;
+ 204   1          memset((void*)_wexRecCmdBuf, 0, WEX_REC_BUF_SIZE);
+ 205   1          
+ 206   1          // 清空发送缓冲区
+ 207   1          _sWexTrsBuf.usHead  = 0;
+ 208   1          _sWexTrsBuf.usTail  = 0;
+ 209   1          memset((void*)_wexTrsCmdBuf, 0, WEX_TRS_BUF_SIZE);
+ 210   1      
+ 211   1          // 清空指令发送数量记录
+ 212   1          _sWexInfo.ulTrsCmdCount = 0;
+ 213   1          _sWexInfo.ulRecCmdCount = 0;
+ 214   1      
+ 215   1          // 清空指令接收指令信息
+ 216   1          _wexRecCmd.eCmdType = eWexCmd_None;
+ 217   1          _wexRecCmd.ucCtrlId = 0;
+ 218   1          _wexRecCmd.ucErrCode= 0;
+ 219   1          _wexRecCmd.ucValue  = 0;
+ 220   1          _wexRecCmd.sColor.ucR   = 0;
+ 221   1          _wexRecCmd.sColor.ucG   = 0;
+ 222   1          _wexRecCmd.sColor.ucB   = 0;
+ 223   1          _wexRecCmd.ucFontSize = 0;
+ 224   1          _wexRecCmd.pcText   = (char*)_wexRecCmd.pucData; // 默认指向数据区
+ 225   1          memset((void*)_wexRecCmd.pcText, 0, sizeof(_wexRecCmd.pucData));
+ 226   1      }
+ 227          
+ 228          
+ 229          /**
+ 230           * @brief 开启 WeXCube
+ 231           * 
+ 232           */
+ 233          void wex_start(void)
+ 234          {
+ 235   1          _sWexInfo.ucWexState = 1;
+ 236   1      }
+ 237          
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 5   
+
+ 238          
+ 239          /**
+ 240           * @brief 停止 WeXCube
+ 241           * 
+ 242           */
+ 243          //void wex_stop(void)
+ 244          //{
+ 245          //    _sWexInfo.ucWexState = 0;
+ 246          //}
+ 247          
+ 248          
+ 249          /**
+ 250           * @brief 向 WeXCube 推送数据
+ 251           * 
+ 252           * @param pucData 数据指针
+ 253           * @param ucLen 数据长度
+ 254           */
+ 255          void wex_push(wex_u8_t *pucData, wex_u8_t ucLen)
+ 256          {
+ 257   1              wex_u8_t i = 0;
+ 258   1              
+ 259   1          if (!_sWexInfo.ucWexState)
+ 260   1              return;
+ 261   1      
+ 262   1          for (i = 0; i < ucLen; i++)
+ 263   1          {
+ 264   2              _sWexRecBuf.pucBuf[_sWexRecBuf.usTail++] = pucData[i];
+ 265   2              _sWexRecBuf.usTail = _sWexRecBuf.usTail % WEX_REC_BUF_SIZE;
+ 266   2          }
+ 267   1      }
+ 268          
+ 269          
+ 270          /**
+ 271           * @brief 获取 WeXCube 信息
+ 272           * 
+ 273           * @param psWexInfo WeXCube 信息结构体指针
+ 274           */
+ 275          //const t_sWexInfo* wex_getInfo(void)
+ 276          //{
+ 277          //    return (const t_sWexInfo*)&_sWexInfo;
+ 278          //}
+ 279          
+ 280          
+ 281          /**
+ 282           * @brief 打印 WeXCube 信息
+ 283           * 
+ 284           */
+ 285          //void wex_printInfo(void)
+ 286          //{
+ 287          //    wex_printf("******************* WeXCube Information *******************\r\n");
+ 288          //    wex_printf("    WeXCube Version         : %d.%d.%d\r\n", (_sWexInfo.usWexVer >> 8) & 0x000F, (_sWexI
+             -nfo.usWexVer >> 4) & 0x000F, _sWexInfo.usWexVer & 0x000F);
+ 289          //    wex_printf("    Command Version         : %d.%d\r\n", (_sWexInfo.ucCmdVer >> 4) & 0x0F, _sWexInfo.us
+             -WexVer & 0x0F);
+ 290          //    wex_printf("    WeXCube State           : %s\r\n", _sWexInfo.ucWexState ? "Running" : "Stop");
+ 291          //    wex_printf("    Receive Buffer Size     : %d\r\n", _sWexInfo.usRecBufSize);
+ 292          //    wex_printf("    Transmit Buffer Size    : %d\r\n", _sWexInfo.usTrsBufSize);
+ 293          //    wex_printf("    Max Transmit At Once    : %d\r\n", _sWexInfo.usTrsMaxOnce);
+ 294          //    wex_printf("    Debug Enable State      : %s\r\n", _sWexInfo.ucDebugEnable ? "Enable" : "Disable");
+ 295          //    wex_printf("    Connect State           : %s\r\n", _sWexInfo.ucConnectState ? "Connected" : "Disconn
+             -ect");
+ 296          //    wex_printf("    Transmit Command Count  : %d\r\n", _sWexInfo.ulTrsCmdCount);
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 6   
+
+ 297          //    wex_printf("    Receive Command Count   : %d\r\n", _sWexInfo.ulRecCmdCount);
+ 298          //    wex_printf("***********************************************************\r\n");
+ 299          //}
+ 300          
+ 301          
+ 302          /**
+ 303           * @brief 获取 WeXCube 运行状态
+ 304           * 
+ 305           * @return wex_u8_t 运行状态 0: 停止 1: 正在运行
+ 306           */
+ 307          //wex_u8_t wex_getWexState(void)
+ 308          //{
+ 309          //    return _sWexInfo.ucWexState;
+ 310          //}
+ 311          
+ 312          
+ 313          /**
+ 314           * @brief 获取连接状态
+ 315           * 
+ 316           * @return wex_u8_t 连接状态 0: 未连接 1: 已连接
+ 317           */
+ 318          wex_u8_t wex_getConnectState(void)
+ 319          {
+ 320   1          return _sWexInfo.ucConnectState;
+ 321   1      }
+ 322          
+ 323          
+ 324          /**
+ 325           * @brief 获取用户发送的指令条数
+ 326           * 
+ 327           * @return wex_u32_t 发送的指令条数
+ 328           */
+ 329          //wex_u32_t wex_geTrsCmdCount(void)
+ 330          //{
+ 331          //    return _sWexInfo.ulTrsCmdCount;
+ 332          //}
+ 333          
+ 334          
+ 335          /**
+ 336           * @brief 获取用户接收的指令条数
+ 337           * 
+ 338           * @return wex_u32_t 接收的指令条数
+ 339           */
+ 340          //wex_u32_t wex_getRecCmdCount(void)
+ 341          //{
+ 342          //    return _sWexInfo.ulRecCmdCount;
+ 343          //}
+ 344          
+ 345          
+ 346          /**
+ 347           * @brief WeXCube 数据处理函数，需要在主循环中调用
+ 348           * 
+ 349           * @return const t_sWexCmd 指令结构体
+ 350           */
+ 351          const t_sWexCmd* wex_process(void)
+ 352          {
+ 353   1          _wexRecCmd.eCmdType = eWexCmd_None;
+ 354   1      
+ 355   1          if (!_sWexInfo.ucWexState)
+ 356   1              goto WEX_PROCESS_FINISH;
+ 357   1      
+ 358   1          // 处理接收数据
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 7   
+
+ 359   1          while (_sWexRecBuf.usHead != _sWexRecBuf.usTail)
+ 360   1          {
+ 361   2              wex_u16_t head = 0;
+ 362   2              wex_u16_t recLen = _sWexRecBuf.usTail > _sWexRecBuf.usHead ? _sWexRecBuf.usTail - _sWexRecBuf.usHe
+             -ad : WEX_REC_BUF_SIZE - _sWexRecBuf.usHead + _sWexRecBuf.usTail;
+ 363   2      
+ 364   2              // 接收数据长度不足则退出
+ 365   2              if (recLen < sizeof(t_sWexCmdBasic))
+ 366   2                  break;
+ 367   2              
+ 368   2              head = _sWexRecBuf.usHead;
+ 369   2              // 判断是否为开始标志
+ 370   2              if (_sWexRecBuf.pucBuf[head++] == WEX_CMD_BEGIN)
+ 371   2              {
+ 372   3                  head = head % WEX_REC_BUF_SIZE;
+ 373   3      
+ 374   3                  // 判断协议版本
+ 375   3                  if ((_sWexRecBuf.pucBuf[head] & 0xF0) == WEX_CMD_VER)
+ 376   3                  {
+ 377   4                      wex_u8_t len = 0;
+ 378   4                                      wex_u8_t i = 0;
+ 379   4                      
+ 380   4                      head    = (head + 1) % WEX_REC_BUF_SIZE;
+ 381   4                      len     = _sWexRecBuf.pucBuf[head];
+ 382   4      
+ 383   4                      if ((len >= sizeof(t_sWexCmdBasic)) && (len <= sizeof(_wexRecItemBuf)))
+ 384   4                      {
+ 385   5                          wex_u8_t n = len - 3;
+ 386   5                          wex_u16_t head1 = 0;
+ 387   5      
+ 388   5                          // 如果指令未接收完则退出
+ 389   5                          if (len > recLen)
+ 390   5                              break;
+ 391   5      
+ 392   5                          head1 = (head + 1) % WEX_REC_BUF_SIZE;
+ 393   5                          _wexRecItemBuf[2] = len;
+ 394   5                          for (i = 0; i < n; i++)
+ 395   5                          {
+ 396   6                              _wexRecItemBuf[i + 3] = _sWexRecBuf.pucBuf[head1];
+ 397   6                              head1 = (head1 + 1) % WEX_REC_BUF_SIZE;
+ 398   6                          }
+ 399   5      
+ 400   5                          // 判断是否为结束标志
+ 401   5                          if ((_wexRecItemBuf[len - 1] == ((WEX_CMD_END & 0xFF00) >> 8)) && (_wexRecItemBuf[len 
+             -- 2] == (WEX_CMD_END & 0x00FF)))
+ 402   5                          {
+ 403   6                              // 赋值
+ 404   6                              _wexRecCmd.eCmdType = (t_eWexCmdType)_wexRecItemBuf[3];
+ 405   6      
+ 406   6                              // 如果之前没有连接则创造出一条连接指令，但不记录到接收�
+             -��令数量中，当前正在处理的指令留到下次处理
+ 407   6                              if ((!_sWexInfo.ucConnectState) && (_wexRecCmd.eCmdType != eWexCmd_Connect))
+ 408   6                              {
+ 409   7                                  _wexRecCmd.eCmdType = eWexCmd_Connect;
+ 410   7                                  head = _sWexRecBuf.usHead;
+ 411   7                              }
+ 412   6                              else
+ 413   6                              {
+ 414   7                                  // 破坏已读指令，防止被再次读取
+ 415   7                                  if (head1 == 0)
+ 416   7                                      _sWexRecBuf.pucBuf[WEX_REC_BUF_SIZE - 1] = 0;
+ 417   7                                  else
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 8   
+
+ 418   7                                      _sWexRecBuf.pucBuf[head1 - 1] = 0;
+ 419   7                                  
+ 420   7                                  head = head1;
+ 421   7      
+ 422   7                                  // 请求握手指令，不对外抛出该指令
+ 423   7                                  if (_wexRecCmd.eCmdType != eWexCmd_AskHandshake)
+ 424   7                                      _sWexInfo.ulRecCmdCount++;
+ 425   7                              }
+ 426   6                              switch (_wexRecCmd.eCmdType)
+ 427   6                              {
+ 428   7                              case eWexCmd_Connect:           // 连接指令
+ 429   7                                  {
+ 430   8                                      _sWexInfo.ucConnectState = 1;
+ 431   8                                      _wex_connectAck();
+ 432   8                                  }
+ 433   7                                  break;
+ 434   7      
+ 435   7                              case eWexCmd_Disconnect:        // 断开连接指令
+ 436   7                                  {
+ 437   8                                      _sWexInfo.ucConnectState = 0;                               
+ 438   8                                  }
+ 439   7                                  break;
+ 440   7      
+ 441   7                              case eWexCmd_AskHandshake:      // 请求握手指令，不对外抛出该指令
+ 442   7                                  {
+ 443   8                                      _wex_sendHandshake();
+ 444   8                                      _wexRecCmd.eCmdType = eWexCmd_None;
+ 445   8                                  }
+ 446   7                                  break;
+ 447   7      
+ 448   7                              case eWexCmd_Err:               // 错误码指令
+ 449   7                                  {
+ 450   8                                      _wexRecCmd.ucCtrlId = _wexRecItemBuf[4];
+ 451   8                                      _wexRecCmd.ucErrCode= _wexRecItemBuf[5];
+ 452   8                                  }
+ 453   7                                  break;
+ 454   7      
+ 455   7                              case eWexCmd_Date:               // 日期指令
+ 456   7                                  {
+ 457   8                                      _wexRecCmd.sDate.ucYear = _wexRecItemBuf[4];
+ 458   8                                      _wexRecCmd.sDate.ucMonth= _wexRecItemBuf[5];
+ 459   8                                      _wexRecCmd.sDate.ucDay  = _wexRecItemBuf[6];
+ 460   8                                  }
+ 461   7                                  break;
+ 462   7      
+ 463   7                              case eWexCmd_Time:               // 时间指令
+ 464   7                                  {
+ 465   8                                      _wexRecCmd.sTime.ucHour     = _wexRecItemBuf[4];
+ 466   8                                      _wexRecCmd.sTime.ucMinute   = _wexRecItemBuf[5];
+ 467   8                                      _wexRecCmd.sTime.ucSecond   = _wexRecItemBuf[6];
+ 468   8                                  }
+ 469   7                                  break;
+ 470   7      
+ 471   7                              case eWexCmd_Event:             // 控件事件触发
+ 472   7                                  {
+ 473   8                                      _wexRecCmd.ucCtrlId = _wexRecItemBuf[4];
+ 474   8                                      _wexRecCmd.ucValue  = _wexRecItemBuf[5];
+ 475   8                                  }
+ 476   7                                  break;
+ 477   7      
+ 478   7                              case eWexCmd_Value:             // 控件值
+ 479   7                                  {
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 9   
+
+ 480   8                                      _wexRecCmd.ucCtrlId = _wexRecItemBuf[4];
+ 481   8                                      _wexRecCmd.ucValue  = _wexRecItemBuf[5];
+ 482   8                                  }
+ 483   7                                  break;
+ 484   7      
+ 485   7                              case eWexCmd_Text:              // 控件文本
+ 486   7                                  {
+ 487   8                                      _wexRecCmd.ucCtrlId = _wexRecItemBuf[4];
+ 488   8                                      memcpy((void*)_wexRecCmd.pcText, (const void*)&_wexRecItemBuf[5], len - 7)
+             -;
+ 489   8                                      _wexRecCmd.pcText[len - 7] = '\0';
+ 490   8                                  }
+ 491   7                                  break;
+ 492   7                              
+ 493   7                              case eWexCmd_BackRGB:           // 控件背景 RGB 颜色
+ 494   7                              case eWexCmd_TextRGB:           // 控件文本 RGB 颜色
+ 495   7                                  {
+ 496   8                                      _wexRecCmd.ucCtrlId     = _wexRecItemBuf[4];
+ 497   8                                      _wexRecCmd.sColor.ucR   = _wexRecItemBuf[5];
+ 498   8                                      _wexRecCmd.sColor.ucG   = _wexRecItemBuf[6];
+ 499   8                                      _wexRecCmd.sColor.ucB   = _wexRecItemBuf[7];
+ 500   8                                  }
+ 501   7                                  break;
+ 502   7                              
+ 503   7                              case eWexCmd_FontSize:          // 控件文本字体大小
+ 504   7                                  {
+ 505   8                                      _wexRecCmd.ucCtrlId     = _wexRecItemBuf[4];
+ 506   8                                      _wexRecCmd.ucFontSize   = _wexRecItemBuf[5];
+ 507   8                                  }
+ 508   7                                  break;
+ 509   7                              
+ 510   7                              default:
+ 511   7                                  break;
+ 512   7                              }
+ 513   6                          }
+ 514   5                      }
+ 515   4                  }
+ 516   3              }
+ 517   2              _sWexRecBuf.usHead = head % WEX_REC_BUF_SIZE;
+ 518   2      
+ 519   2              // 每次只处理一条指令
+ 520   2              if (_wexRecCmd.eCmdType != eWexCmd_None)
+ 521   2                  break;
+ 522   2          }
+ 523   1      
+ 524   1      
+ 525   1          // 处理发送数据
+ 526   1          if (_sWexTrsBuf.usHead != _sWexTrsBuf.usTail)
+ 527   1          {
+ 528   2              if (_sWexTrsBuf.usHead < _sWexTrsBuf.usTail)
+ 529   2              {
+ 530   3                  if (_sWexTrsBuf.usTail - _sWexTrsBuf.usHead < WEX_TRS_MAX_ONCE)
+ 531   3                  {
+ 532   4                      wex_port_send(&_sWexTrsBuf.pucBuf[_sWexTrsBuf.usHead], _sWexTrsBuf.usTail - _sWexTrsBuf.us
+             -Head);
+ 533   4                      _sWexTrsBuf.usHead = _sWexTrsBuf.usTail;
+ 534   4                  }
+ 535   3                  else
+ 536   3                  {
+ 537   4                      wex_port_send(&_sWexTrsBuf.pucBuf[_sWexTrsBuf.usHead], WEX_TRS_MAX_ONCE);
+ 538   4                      _sWexTrsBuf.usHead += WEX_TRS_MAX_ONCE;
+ 539   4                  }
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 10  
+
+ 540   3              }
+ 541   2              else
+ 542   2              {
+ 543   3                  if (WEX_TRS_BUF_SIZE - _sWexTrsBuf.usHead > WEX_TRS_MAX_ONCE)
+ 544   3                  {
+ 545   4                      wex_port_send(&_sWexTrsBuf.pucBuf[_sWexTrsBuf.usHead], WEX_TRS_MAX_ONCE);
+ 546   4                      _sWexTrsBuf.usHead += WEX_TRS_MAX_ONCE;
+ 547   4                  }
+ 548   3                  else
+ 549   3                  {
+ 550   4                      wex_port_send(&_sWexTrsBuf.pucBuf[_sWexTrsBuf.usHead], WEX_TRS_BUF_SIZE - _sWexTrsBuf.usHe
+             -ad);
+ 551   4                      _sWexTrsBuf.usHead = 0;
+ 552   4                  }
+ 553   3              }
+ 554   2          }
+ 555   1      
+ 556   1      WEX_PROCESS_FINISH:
+ 557   1          return (const t_sWexCmd *)(&_wexRecCmd);
+ 558   1      }
+ 559          
+ 560          
+ 561          /**
+ 562           * @brief 把发送数据推入发送缓冲区
+ 563           * 
+ 564           * @param pucData 发送数据
+ 565           * @param ucLen 发送数据长度
+ 566           * @param ucFlag 指令发出身份标志, 0: WeXCube 自身发出, 1: 用户发出
+ 567           */
+ 568          static void _wex_pop(wex_u8_t *pucData, wex_u8_t ucLen, wex_u8_t ucFlag)
+ 569          {
+ 570   1          if (!_sWexInfo.ucWexState)
+ 571   1              return;
+ 572   1      
+ 573   1          if (_sWexTrsBuf.usTail + ucLen < WEX_TRS_BUF_SIZE)
+ 574   1          {
+ 575   2              memcpy((void*)&_sWexTrsBuf.pucBuf[_sWexTrsBuf.usTail], (const void*)pucData, (size_t)ucLen);
+ 576   2              _sWexTrsBuf.usTail += ucLen;
+ 577   2          }
+ 578   1          else
+ 579   1          {
+ 580   2              wex_u8_t len = WEX_TRS_BUF_SIZE - _sWexTrsBuf.usTail;
+ 581   2              memcpy((void*)&_sWexTrsBuf.pucBuf[_sWexTrsBuf.usTail], (const void*)pucData, (size_t)len);
+ 582   2              memcpy((void*)&_sWexTrsBuf.pucBuf[0], (const void*)&pucData[len], (size_t)(ucLen - len));
+ 583   2              _sWexTrsBuf.usTail = ucLen - len;
+ 584   2          }
+ 585   1      
+ 586   1          if (ucFlag == 1)
+ 587   1              _sWexInfo.ulTrsCmdCount++;
+ 588   1      }
+ 589          
+ 590          
+ 591          /**
+ 592           * @brief 发送基础指令
+ 593           * 
+ 594           * @param eCmdType 指令类型
+ 595           * @param ucFlag 指令发出身份标志, 0: WeXCube 自身发出, 1: 用户发出
+ 596           */
+ 597          static void _wex_sendBasic(t_eWexDevCmdType eCmdType, wex_u8_t ucFlag)
+ 598          {
+ 599   1          t_sWexCmdBasic *wexCmd = (t_sWexCmdBasic *)_wexTrsItemBuf;
+ 600   1      
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 11  
+
+ 601   1          if (((wex_u8_t)eCmdType >= (wex_u8_t)0x80) || (eCmdType == 0))
+ 602   1              return;
+ 603   1      
+ 604   1          wexCmd->ucLen = sizeof(t_sWexCmdBasic);
+ 605   1          wexCmd->ucCmd = eCmdType;
+ 606   1          wexCmd->usEnd1= WEX_CMD_END & 0xFF;
+ 607   1              wexCmd->usEnd2= (WEX_CMD_END >> 8) & 0xFF;
+ 608   1          _wex_pop(_wexTrsItemBuf, wexCmd->ucLen, ucFlag);
+ 609   1      }
+ 610          
+ 611          
+ 612          #if defined(WEX_ASKVALUE) || defined(WEX_ASKTEXT) || defined(WEX_ASKBACKRGB) || defined(WEX_ASKTEXTRGB) ||
+             - defined(WEX_ASKFONTSIZE)
+              /**
+               * @brief 发送指令结构 1
+               * 
+               * @param eCmdType 指令类型
+               * @param ucCtrlId 控制 ID
+               */
+              static void _wex_sendStruct1(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId)
+              {
+                  t_sWexCmdStruct1 *wexCmd = (t_sWexCmdStruct1 *)_wexTrsItemBuf;
+              
+                  if (((wex_u8_t)eCmdType >= (wex_u8_t)0x80) || (eCmdType == 0))
+                      return;
+                  if (ucCtrlId == 0)
+                      return;
+                  
+                  wexCmd->ucLen = sizeof(t_sWexCmdStruct1);
+                  wexCmd->ucCmd = eCmdType;
+                  wexCmd->ucCtrlId = ucCtrlId;
+                  wexCmd->usEnd1= WEX_CMD_END & 0xFF;
+                      wexCmd->usEnd2= (WEX_CMD_END >> 8) & 0xFF;
+                  _wex_pop(_wexTrsItemBuf, wexCmd->ucLen, 1);
+              }
+              #endif
+ 636          
+ 637          
+ 638          #if defined(WEX_SETVALUE) || defined(WEX_SETFONTSIZE)
+ 639          /**
+ 640           * @brief 发送指令结构 2
+ 641           * 
+ 642           * @param eCmdType 指令类型
+ 643           * @param ucCtrlId 控制 ID
+ 644           * @param ucValue 值
+ 645           */
+ 646          static void _wex_sendStruct2(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId, wex_u8_t ucValue)
+ 647          {
+ 648   1          t_sWexCmdStruct2 *wexCmd = (t_sWexCmdStruct2 *)_wexTrsItemBuf;
+ 649   1      
+ 650   1          if (((wex_u8_t)eCmdType >= (wex_u8_t)0x80) || (eCmdType == 0))
+ 651   1              return;
+ 652   1          if (ucCtrlId == 0)
+ 653   1              return;
+ 654   1          
+ 655   1          wexCmd->ucLen = sizeof(t_sWexCmdStruct2);
+ 656   1          wexCmd->ucCmd = eCmdType;
+ 657   1          wexCmd->ucCtrlId = ucCtrlId;
+ 658   1          wexCmd->ucValue = ucValue;
+ 659   1          wexCmd->usEnd1= WEX_CMD_END & 0xFF;
+ 660   1              wexCmd->usEnd2= (WEX_CMD_END >> 8) & 0xFF;
+ 661   1          _wex_pop(_wexTrsItemBuf, wexCmd->ucLen, 1);
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 12  
+
+ 662   1      }
+ 663          #endif
+ 664          
+ 665          
+ 666          #ifdef WEX_SETTEXT
+ 667          /**
+ 668           * @brief 发送指令结构 3
+ 669           * 
+ 670           * @param eCmdType 指令类型
+ 671           * @param ucCtrlId 控制 ID
+ 672           * @param pcText 文本，于'\0'结尾
+ 673           */
+ 674          static void _wex_sendStruct3(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId, const char *pcText)
+ 675          {
+ 676   1          t_sWexCmdStruct3 *wexCmd = (t_sWexCmdStruct3 *)_wexTrsItemBuf;
+ 677   1          wex_u32_t textLen = strlen(pcText);
+ 678   1      
+ 679   1          if (((wex_u8_t)eCmdType >= (wex_u8_t)0x80) || (eCmdType == 0))
+ 680   1              return;
+ 681   1          if (ucCtrlId == 0)
+ 682   1              return;
+ 683   1          if (pcText == WEX_NULL)
+ 684   1              textLen = 0;
+ 685   1          if (textLen > sizeof(wexCmd->pcText))
+ 686   1              textLen = sizeof(wexCmd->pcText);
+ 687   1      
+ 688   1          wexCmd->ucLen = sizeof(t_sWexCmdStruct3) - sizeof(wexCmd->pcText) + textLen;
+ 689   1          wexCmd->ucCmd = eCmdType;
+ 690   1          wexCmd->ucCtrlId = ucCtrlId;
+ 691   1          memcpy((void*)wexCmd->pcText, pcText, (size_t)textLen);
+ 692   1          _wexTrsItemBuf[wexCmd->ucLen - 2] = (wex_u8_t)(WEX_CMD_END & 0xFF);
+ 693   1          _wexTrsItemBuf[wexCmd->ucLen - 1] = (wex_u8_t)((WEX_CMD_END >> 8) & 0xFF);
+ 694   1          _wex_pop(_wexTrsItemBuf, wexCmd->ucLen, 1);
+ 695   1      }
+ 696          #endif
+ 697          
+ 698          
+ 699          #if defined(WEX_SETBACKRGB) || defined(WEX_SETTEXTRGB) || defined(WEX_SETBACKCOLOR) || defined(WEX_SETTEXT
+             -COLOR)
+              /**
+               * @brief 发送指令结构 4
+               * 
+               * @param eCmdType 指令类型
+               * @param ucCtrlId 控制 ID
+               * @param ucValue1 值 1
+               * @param ucValue2 值 2
+               * @param ucValue3 值 3
+               */
+              static void _wex_sendStruct4(t_eWexDevCmdType eCmdType, wex_u8_t ucCtrlId, wex_u8_t ucValue1, wex_u8_t ucV
+             -alue2, wex_u8_t ucValue3)
+              {
+                  t_sWexCmdStruct4 *wexCmd = (t_sWexCmdStruct4 *)_wexTrsItemBuf;
+              
+                  if (((wex_u8_t)eCmdType >= (wex_u8_t)0x80) || (eCmdType == 0))
+                      return;
+                  if (ucCtrlId == 0)
+                      return;
+              
+                  wexCmd->ucLen = sizeof(t_sWexCmdStruct4);
+                  wexCmd->ucCmd = eCmdType;
+                  wexCmd->ucCtrlId = ucCtrlId;
+                  wexCmd->ucValue1 = ucValue1;
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 13  
+
+                  wexCmd->ucValue2 = ucValue2;
+                  wexCmd->ucValue3 = ucValue3;
+                      wexCmd->usEnd1= WEX_CMD_END & 0xFF;
+                  wexCmd->usEnd2= (WEX_CMD_END >> 8) & 0xFF;
+                  _wex_pop(_wexTrsItemBuf, wexCmd->ucLen, 1);
+              }
+              #endif
+ 729          
+ 730          
+ 731          /**
+ 732           * @brief 确定连接
+ 733           * 
+ 734           */
+ 735          static void _wex_connectAck(void)
+ 736          {
+ 737   1          _wex_sendBasic(eWexDevCmd_ConnectAck, 0);
+ 738   1      }
+ 739          
+ 740          
+ 741          /**
+ 742           * @brief WeXCube 发送握手
+ 743           * 
+ 744           */
+ 745          void _wex_sendHandshake(void)
+ 746          {
+ 747   1          _wex_sendBasic(eWexDevCmd_Handshake, 0);
+ 748   1      }
+ 749          
+ 750          
+ 751          #ifdef WEX_SENDDISCONNECT
+              /**
+               * @brief 发送断开连接
+               * 
+               */
+              void wex_sendDisconnect(void)
+              {
+                  _wex_sendBasic(eWexDevCmd_Disconnect, 1);
+              }
+              #endif
+ 761          
+ 762          
+ 763          #ifdef WEX_ASKHANDSHAKE
+              /**
+               * @brief 请求握手
+               * 
+               */
+              void wex_askHandshake(void)
+              {
+                  _wex_sendBasic(eWexDevCmd_AskHandshake, 1);
+              }
+              #endif
+ 773          
+ 774          
+ 775          #ifdef WEX_ASKERR
+              /**
+               * @brief 请求错误码
+               * 
+               */
+              void wex_askErr(void)
+              {
+                  _wex_sendBasic(eWexDevCmd_AskErr, 1);
+              }
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 14  
+
+              #endif
+ 785          
+ 786          
+ 787          #ifdef WEX_ASKDATE
+              /**
+               * @brief 请求日期
+               * 
+               */
+              void wex_askDate(void)
+              {
+                  _wex_sendBasic(eWexDevCmd_AskDate, 1);
+              }
+              #endif
+ 797          
+ 798          
+ 799          #ifdef WEX_ASKTIME
+              /**
+               * @brief 请求时间
+               * 
+               */
+              void wex_askTime(void)
+              {
+                  _wex_sendBasic(eWexDevCmd_AskTime, 1);
+              }
+              #endif
+ 809          
+ 810          
+ 811          #ifdef WEX_ASKVALUE
+              /**
+               * @brief 请求控件值
+               * 
+               * @param ucCtrlId 控件 ID
+               */
+              void wex_askValue(wex_u8_t ucCtrlId)
+              {
+                  _wex_sendStruct1(eWexDevCmd_AskValue, ucCtrlId);
+              }
+              #endif
+ 822          
+ 823          
+ 824          #ifdef WEX_ASKTEXT
+              /**
+               * @brief 请求控件文本
+               * 
+               * @param ucCtrlId 控件 ID
+               */
+              void wex_askText(wex_u8_t ucCtrlId)
+              {
+                  _wex_sendStruct1(eWexDevCmd_AskText, ucCtrlId);
+              }
+              #endif
+ 835          
+ 836          
+ 837          #ifdef WEX_ASKBACKRGB
+              /**
+               * @brief 请求控件背景 RGB 颜色值
+               * 
+               * @param ucCtrlId 控件 ID
+               */
+              void wex_askBackRGB(wex_u8_t ucCtrlId)
+              {
+                  _wex_sendStruct1(eWexDevCmd_AskBackRGB, ucCtrlId);
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 15  
+
+              }
+              #endif
+ 848          
+ 849          
+ 850          #ifdef WEX_ASKTEXTRGB
+              /**
+               * @brief 请求控件文本 RGB 颜色值
+               * 
+               * @param ucCtrlId 控件 ID
+               */
+              void wex_askTextRGB(wex_u8_t ucCtrlId)
+              {
+                  _wex_sendStruct1(eWexDevCmd_AskTextRGB, ucCtrlId);
+              }
+              #endif
+ 861          
+ 862          
+ 863          #ifdef WEX_ASKFONTSIZE
+              /**
+               * @brief 请求控件文本字体大小
+               * 
+               * @param ucCtrlId 控件 ID
+               */
+              void wex_askFontSize(wex_u8_t ucCtrlId)
+              {
+                  _wex_sendStruct1(eWexDevCmd_AskFontSize, ucCtrlId);
+              }
+              #endif
+ 874          
+ 875          
+ 876          #ifdef WEX_SETVALUE
+ 877          /**
+ 878           * @brief 设置控件值
+ 879           * 
+ 880           * @param ucCtrlId 控件 ID
+ 881           * @param ucValue 值
+ 882           */
+ 883          void wex_setValue(wex_u8_t ucCtrlId, wex_u8_t ucValue)
+ 884          {
+ 885   1          _wex_sendStruct2(eWexDevCmd_SetValue, ucCtrlId, ucValue);
+ 886   1      }
+ 887          #endif
+ 888          
+ 889          
+ 890          #ifdef WEX_SETTEXT
+ 891          /**
+ 892           * @brief 设置控件文本
+ 893           * 
+ 894           * @param ucCtrlId 控件 ID
+ 895           * @param pcText 文本，于'\0'结尾
+ 896           */
+ 897          void wex_setText(wex_u8_t ucCtrlId, const char *pcText)
+ 898          {
+ 899   1          _wex_sendStruct3(eWexDevCmd_SetText, ucCtrlId, pcText);
+ 900   1      }
+ 901          #endif
+ 902          
+ 903          
+ 904          #ifdef WEX_SETBACKCOLOR
+              /**
+               * @brief 设置控件背景颜色种类
+               * 
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 16  
+
+               * @param ucCtrlId 控件 ID
+               * @param eColor 颜色编号
+               */
+              void wex_setBackColor(wex_u8_t ucCtrlId, t_eWexColor eColor)
+              {
+                  _wex_sendStruct4(eWexDevCmd_SetBackRGB, ucCtrlId, _pucWexColorRGB[eColor][0], _pucWexColorRGB[eColor][
+             -1], _pucWexColorRGB[eColor][2]);
+              }
+              #endif
+ 916          
+ 917          
+ 918          #ifdef WEX_SETTEXTCOLOR
+              /**
+               * @brief 设置控件文本颜色种类
+               * 
+               * @param ucCtrlId 控件 ID
+               * @param eColor 颜色编号
+               */
+              void wex_setTextColor(wex_u8_t ucCtrlId, t_eWexColor eColor)
+              {
+                  _wex_sendStruct4(eWexDevCmd_SetTextRGB, ucCtrlId, _pucWexColorRGB[eColor][0], _pucWexColorRGB[eColor][
+             -1], _pucWexColorRGB[eColor][2]);
+              }
+              #endif
+ 930          
+ 931          
+ 932          #ifdef WEX_SETBACKRGB
+              /**
+               * @brief 设置控件背景 RGB 颜色值
+               * 
+               * @param ucCtrlId 控件 ID
+               * @param ucR Red 值
+               * @param ucG Green 值
+               * @param ucB Blue 值
+               */
+              void wex_setBackRGB(wex_u8_t ucCtrlId, wex_u8_t ucR, wex_u8_t ucG, wex_u8_t ucB)
+              {
+                  _wex_sendStruct4(eWexDevCmd_SetBackRGB, ucCtrlId, ucR, ucG, ucB);
+              }
+              #endif
+ 946          
+ 947          
+ 948          #ifdef WEX_SETTEXTRGB
+              /**
+               * @brief 设置控件文本 RGB 颜色值
+               * 
+               * @param ucCtrlId 控件 ID
+               * @param ucR Red 值
+               * @param ucG Green 值
+               * @param ucB Blue 值
+               */
+              void wex_setTextRGB(wex_u8_t ucCtrlId, wex_u8_t ucR, wex_u8_t ucG, wex_u8_t ucB)
+              {
+                  _wex_sendStruct4(eWexDevCmd_SetTextRGB, ucCtrlId, ucR, ucG, ucB);
+              }
+              #endif
+ 962          
+ 963          
+ 964          #ifdef WEX_SETFONTSIZE
+              /**
+               * @brief 设置控件文本字体大小
+               * 
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 17  
+
+               * @param ucCtrlId 控件 ID
+               * @param ucSize 字体大小
+               */
+              void wex_setFontSize(wex_u8_t ucCtrlId, wex_u8_t ucSize)
+              {
+                  _wex_sendStruct2(eWexDevCmd_SetFontSize, ucCtrlId, ucSize);
+              }
+              #endif
+ 976          
+ 977          
+ 978          #ifdef WEX_STRTOINT
+              /**
+               * @brief 将字符串转换为有符号整数
+               * 
+               * @param pcStr 字符串指针，于'\0'结尾
+               * @return wex_s32_t 有符号整数
+               */
+              wex_s32_t wex_strToInt(const char *pcStr)
+              {
+                  return strtol(pcStr, NULL, 10);
+              }
+              #endif
+ 990          
+ 991          
+ 992          #ifdef WEX_STRTOUINT
+ 993          /**
+ 994           * @brief 将字符串转换为无符号整数
+ 995           * 
+ 996           * @param pcStr 字符串指针，于'\0'结尾
+ 997           * @return wex_u32_t 无符号整数
+ 998           */
+ 999          wex_u32_t wex_strToUint(const char *pcStr)
+1000          {
+1001   1          return strtoul(pcStr, NULL, 10);
+1002   1      }
+1003          #endif
+1004          
+1005          
+1006          #ifdef WEX_INTTOSTR
+              /**
+               * @brief 将有符号整数转换为字符串
+               * 
+               * @param slInt 有符号整数
+               * @return const char* 字符串指针，临时变量需要尽快使用
+               */
+              const char* wex_intToStr(wex_s32_t slInt)
+              {
+                  sprintf(_wexStrBuf, "%ld", slInt);
+                  return (const char*)_wexStrBuf;
+              }
+              #endif
+1019          
+1020          
+1021          #ifdef WEX_UINTTOSTR
+1022          /**
+1023           * @brief 将无符号整数转换为字符串
+1024           * 
+1025           * @param ulUint 无符号整数
+1026           * @return const char* 字符串指针，临时变量需要尽快使用
+1027           */
+1028          const char* wex_uintToStr(wex_u32_t ulUint)
+1029          {
+C51 COMPILER V9.60.0.0   WEXCUBE                                                           03/09/2025 14:24:41 PAGE 18  
+
+1030   1          sprintf(_wexStrBuf, "%lu", ulUint);
+1031   1          return (const char*)_wexStrBuf;
+1032   1      }
+1033          #endif
+1034          
+1035          
+1036          #ifdef WEX_STRTOFLOAT
+              /**
+               * @brief 将字符串转换为单精度浮点数
+               * 
+               * @param pcStr 字符串指针，于'\0'结尾
+               * @return wex_f32_t 单精度浮点数
+               */
+              wex_f32_t wex_strToFloat(const char *pcStr)
+              {
+                  return (wex_f32_t)strtod(pcStr, NULL);
+              }
+              #endif
+1048          
+1049          
+1050          #ifdef WEX_FLOATTOSTR
+              /**
+               * @brief 将单精度浮点数转换为字符串
+               * 
+               * @param fFloat 单精度浮点数
+               * @param ucPrecision 小数点位数，为 255 时不限制小数点位数
+               * @return const char* 字符串指针，临时变量需要尽快使用
+               */
+              const char* wex_floatToStr(wex_f32_t fFloat, wex_u8_t ucPrecision)
+              {
+                      ucPrecision = 255;
+                      // C51 可能不支持动态设置小数点位数，如果需要设定位数的话可以手动修改。
+                      // 如设置小数点位数为3：sprintf(_wexStrBuf, "%.3f", fFloat);
+                  sprintf(_wexStrBuf, "%f", fFloat);
+                  return (const char*)_wexStrBuf;
+              }
+              #endif
+1067          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2342    ----
+   CONSTANT SIZE    =     55    ----
+   XDATA SIZE       =    388      40
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

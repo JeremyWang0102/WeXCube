@@ -1,0 +1,13 @@
+编译器：Arduino IDE 2.3.4
+单片机：ESP-WROOM-32
+Arduino开发板固件：ESP32 Dev Module
+
+该示例适用于 ESP32 BLE 只用于 WeXCube 连接。
+WeXCube 小程序设备页面有四个控件：3个文本框和1个按钮。文本控件的ID分别为1、2、3，按钮的ID为4。
+第一个文本显示ESP32芯片温度，第二个文本显示ESP32芯片内部霍尔传感器值，第三个文本显示计数值，按钮按下后计数值清零。
+
+wexcube_sdk 相关文件只能放入 src 文件夹中才能被编译，
+src 文件夹需要与 .ino 在同一目录下，
+src 文件夹中的 .c 文件需要改为 .cpp 文件。
+如果 wexcube_sdk 中文件被修改，
+则需要删除 C:\Users\<YourName>\AppData\Local\arduino\sketches 中的编译缓存。

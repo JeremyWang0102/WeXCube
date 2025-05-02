@@ -1,0 +1,6 @@
+".\Objects\STARTUP.obj",
+".\Objects\main.obj",
+".\Objects\wexcube_port.obj",
+".\Objects\wexcube.obj" 
+TO ".\Objects\WeXCube_Test" 
+PRINT(".\Listings\WeXCube_Test.m51") RAMSIZE(256) 

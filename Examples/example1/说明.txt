@@ -1,0 +1,10 @@
+编译器：Keil5
+单片机：STM32F030F4P6，使用 uart1 与蓝牙模块通信。
+蓝牙模块：VG6328A，串口默认（115200bps,8bit,1stop,None Parity）
+通知特征值：0000FFE2-0000-1000-8000-00805F9B34FB
+写入特征值：0000FFE1-0000-1000-8000-00805F9B34FB
+
+功能：可以获取当前温度值，可以调节小夜灯灯光。
+视频演示地址：https://www.bilibili.com/video/BV16NwweNEsf/?spm_id_from=333.337.search-card.all.click&vd_source=092467d4573d952f721032ef4e80100f
+
+可以访问本示例小程序，然后收藏本示例小程序，就体验和修改小程序页面了。
